@@ -1,1 +1,1 @@
-JSON-minify==0.3.0
+nose==1.3.7
