@@ -1,4 +1,4 @@
-"""CLI for initializing SFS and SFS related queries"""
+"""CLI for removing duplicate files from an SFS"""
 
 import collections
 import functools
