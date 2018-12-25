@@ -88,6 +88,20 @@ class CacheTests(unittest.TestCase):
 
 class FileSizeHelperTests(unittest.TestCase):
 
+    def test_with_default(self):
+        # Returns value if not None else default
+        default = 1
+        self.assertEqual(10, sfs_helper.with_default(10, default))
+        self.assertEqual(default, sfs_helper.with_default(None, default))
+
+        # Wraps functions to make them yield defaults
+        def test_func(x):
+            return x * 2
+
+        default = -1
+        self.assertEqual(20, sfs_helper.with_default(test_func, default)(10))
+        self.assertEqual(default, sfs_helper.with_default(test_func, default)(None))
+
     def test_get_readable_size(self):
         tests = [
             (10, '10.00 Bytes'),

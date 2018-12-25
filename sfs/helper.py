@@ -13,6 +13,14 @@ class Disallowed(exceptions.SFSException):
     pass
 
 
+# Development Utils
+
+def untested(x):
+    """Decorator to mark a class or function as untested"""
+    log.logger.warn('A component has been marked untested: %s', x.__name__)
+    return x
+
+
 # Decorators
 
 
@@ -86,6 +94,12 @@ def cached_method(cache_size=100):
 # Utils
 
 
+def with_default(val_or_func, default):
+    if callable(val_or_func):
+        return lambda val: default if val is None else val_or_func(val)
+    return default if val_or_func is None else val_or_func
+
+
 def get_readable_size(size_bytes):
     """Convert size in bytes to human readable string"""
     temp = size_bytes
@@ -99,12 +113,6 @@ def get_readable_size(size_bytes):
 
 
 # Unused
-
-
-def untested(x):
-    """Decorator to mark a class or function as untested"""
-    log.logger.warn('A component has been marked untested: %s', x.__name__)
-    return x
 
 
 class ConstantsMetaClass(type):
