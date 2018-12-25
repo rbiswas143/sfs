@@ -1,0 +1,242 @@
+"""CLI for initializing SFS and SFS related queries"""
+
+import collections
+import functools
+import os
+import time
+
+import sfs.core as core
+import sfs.events as events
+import sfs.exceptions as exceptions
+import sfs.file_system as fs
+import sfs.helper as helper
+import sfs.log_utils as log
+import sfs.ops.helper as ops_helper
+
+constants = {
+    'DEDUP_FILE_EXTENSION': '.dedup'
+}
+
+commands = {
+    'FIND_DUPS': 'find-dups',
+    'DEDUP': 'dedup',
+}
+
+messages = {
+    'FIND_DUPS': {
+        'HELP': 'Find duplicates and save them as a JSON file in the target directory',
+        'HELP_OPT': {
+            'PATH': ('Path of the the target directory in the SFS to be de-duplicated. '
+                     'Defaults to the current working directory'),
+            'OVERRIDE': 'Override existing JSON if any',
+            'MARK_DUPS': 'Mark duplicates for deletion'
+        },
+        'ERROR': {
+            'NOT_IN_SFS': 'Path is not in an SFS',
+            'INVALID_PATH': 'Not a directory',
+            'JSON_EXISTS': 'JSON already exists in target directory',
+        },
+        'OUTPUT': {
+            'NO_DUPLICATES': 'No duplicates found',
+            'DUPLICATE_COUNT': 'Duplicates found: ',
+            'JSON_PATH': 'Duplicates have been saved in JSON file: ',
+        }
+    },
+    'DEDUP': {
+        'HELP': 'Delete duplicates using the JSON file generated with command "{}"'.format(commands['FIND_DUPS']),
+        'HELP_OPT': {
+            'PATH': ('Path of the the target directory in the SFS to be de-duplicated. '
+                     'Defaults to the current working directory'),
+            'DEL_JSON': 'Delete the JSON file after the de-duplication. Default False.'
+        },
+        'ERROR': {
+            'NOT_IN_SFS': 'Path is not in an SFS',
+            'INVALID_PATH': 'Not a directory',
+            'JSON_NOT_FOUND': 'JSON not found in target directory',
+        },
+        'OUTPUT': 'Links Deleted: ',
+    }
+}
+
+
+@events.subscriber(events.events['CLI_REGISTRY'])
+def _sfs_ops_cli(parser, parents=()):
+    dedup_json = parser.add_parser(
+        commands['FIND_DUPS'],
+        parents=parents,
+        help=messages['FIND_DUPS']['HELP']
+    )
+    dedup_json.add_argument('path', nargs='?', help=messages['FIND_DUPS']['HELP_OPT']['PATH'])
+    dedup_json.add_argument(
+        '-o', '--override', action='store_true', help=messages['FIND_DUPS']['HELP_OPT']['OVERRIDE']
+    )
+    dedup_json.add_argument(
+        '-d', '--del-duplicates', action='store_true', help=messages['FIND_DUPS']['HELP_OPT']['OVERRIDE']
+    )
+
+    dedup = parser.add_parser(
+        commands['DEDUP'],
+        parents=parents,
+        help=messages['DEDUP']['HELP']
+    )
+    dedup.add_argument('path', nargs='?', help=messages['DEDUP']['HELP_OPT']['PATH'])
+    dedup.add_argument('-d', '--del-json', action='store_true', help=messages['DEDUP']['HELP_OPT']['DEL_JSON'])
+
+
+@ops_helper.cli_command(commands['FIND_DUPS'])
+def _find_dups_command_handler(args):
+    """
+    Find duplicate files by source file name and size in 'args.path' (or current working directory by default) and save
+    them in a JSON file in the current directory
+    The user can then edit the JSON file to mark files for deletion and then proceed with de-duplication
+    If 'args.del_duplicates' is used, all but the first file in a list of duplicates are marked for deletion
+    If a de-duplication JSON already exists in the target directory, 'args.override' can be used to override it
+    """
+    keep = 'first' if args.del_duplicates else 'all'
+    path = os.getcwd() if args.path is None else args.path
+    log.logger.debug('Path: "%s", Keep: "%s", Override: "%s"', path, keep, args.override)
+
+    if not os.path.isdir(path):
+        raise exceptions.CLIValidationException(messages['FIND_DUPS']['ERROR']['INVALID_PATH'])
+
+    sfs = core.SFS.get_by_path(path)
+    if sfs is None:
+        raise exceptions.CLIValidationException(messages['FIND_DUPS']['ERROR']['NOT_IN_SFS'])
+
+    json_path = get_json_path(path)
+    log.logger.debug('JSON Path: %s', json_path)
+    if not args.override and os.path.isfile(json_path):
+        raise exceptions.CLIValidationException(messages['FIND_DUPS']['ERROR']['JSON_EXISTS'])
+
+    dups = find_dups(sfs, path, keep=keep)
+    if len(dups) == 0:
+        log.cli_output(messages['FIND_DUPS']['OUTPUT']['NO_DUPLICATES'])
+        return
+
+    fs.save_json(dups, json_path, serializer=lambda dup_link: dup_link.to_json())
+    dup_count = functools.reduce(lambda _sum, dup_list: _sum + len(dup_list), dups, 0)
+    log.cli_output("{}{}".format(messages['FIND_DUPS']['OUTPUT']['DUPLICATE_COUNT'], dup_count))
+    log.cli_output("{}{}".format(messages['FIND_DUPS']['OUTPUT']['JSON_PATH'], json_path))
+
+
+@ops_helper.cli_command(commands['DEDUP'])
+def _dedup_command_handler(args):
+    """
+    Delete files marked for deletion from a target directory using a JSON file generated by the find duplicates command
+    The de-duplication JSON can be auto-deleted post de-duplication with the flag 'args.del_json'
+    """
+    path = os.getcwd() if args.path is None else args.path
+    log.logger.debug('Path: "%s", Delete JSON: "%s"', path, args.del_json)
+
+    if not os.path.isdir(path):
+        raise exceptions.CLIValidationException(messages['DEDUP']['ERROR']['INVALID_PATH'])
+
+    sfs = core.SFS.get_by_path(path)
+    if sfs is None:
+        raise exceptions.CLIValidationException(messages['DEDUP']['ERROR']['NOT_IN_SFS'])
+
+    json_path = get_json_path(path)
+    log.logger.debug('JSON Path: %s', json_path)
+    if not os.path.isfile(json_path):
+        raise exceptions.CLIValidationException(messages['DEDUP']['ERROR']['JSON_NOT_FOUND'])
+
+    dups = fs.load_json(json_path, deserializer=lambda dup_json: DuplicateLink.from_json(dup_json))
+    del_count = del_dups(path, dups)
+
+    if args.del_json:
+        os.unlink(json_path)
+
+    log.cli_output("{}{}".format(messages['DEDUP']['OUTPUT'], del_count))
+
+
+class DuplicateLink:
+
+    def __init__(self, sfs_path, source_path=None, size=None, ctime=None, keep=1):
+        self.sfs_path = sfs_path
+        self.source_path = source_path
+        self.size = size
+        self.ctime = ctime
+        self.keep = keep
+
+    def to_json(self):
+        d = collections.OrderedDict()
+        d['Link Path'] = self.sfs_path
+        d['Source Path'] = self.source_path
+        d['Size'] = helper.get_readable_size(self.size)
+        d['Last Modified'] = time.ctime(self.ctime)
+        d['Keep'] = self.keep
+        return d
+
+    @staticmethod
+    def from_json(json_dict):
+        return DuplicateLink(json_dict['Link Path'], keep=json_dict['Keep'])
+
+
+def find_dups(sfs, target_dir, keep='all'):
+    """
+    Find and generate lists of duplicate links
+    :param sfs: SFS instance to work on
+    :param target_dir: Target directory for de-duplication
+    :param keep: One of 'all', meaning do not delete any file, or 'first' meaning delete all but first file
+    :return: List of duplicate lists where each item is an instance of DuplicateLink
+    """
+    # dups keeps track of only duplicate keys
+    dups = collections.defaultdict(set)
+    # node_dict keeps track metadata of all nodes
+    node_dict = collections.defaultdict(lambda: collections.defaultdict(list))
+
+    for root, files, dirs, links in core.SFS.walk(fs.walk_bfs, target_dir):
+        for lnk in links:
+            source_path = os.readlink(lnk.path)
+
+            # Ignore orphan and foreign links
+            col = sfs.get_collection_by_path(source_path)
+            if col is None:
+                continue
+            stats = col.get_stats(source_path)
+            if stats is None:
+                continue
+
+            # Dictionary keys are source file and size
+            name = os.path.basename(source_path)
+            dup_list = node_dict[name][stats.size]
+            dup_list.append([lnk, source_path, stats])
+
+            # Add only duplicate keys to dups
+            if len(dup_list) > 1:
+                dups[name].add(stats.size)
+
+    # Compute a list lists of DuplicateLink
+    return [
+        [
+            DuplicateLink(
+                os.path.relpath(lnk.path, target_dir), source_path=source_path,
+                size=stats.size, ctime=stats.ctime,
+                keep=0 if (keep == 'first' and i > 0) else 1
+            ) for i, (lnk, source_path, stats) in enumerate(node_dict[name][size])
+        ]
+        for name in sorted(dups) for size in sorted(dups[name])
+    ]
+
+
+def del_dups(target_dir, dups):
+    """
+    Delete links marked for de-duplication in the dulicate list 'dups'
+    A Duplicate Link is to be deleted if 'keep' is 0
+    """
+    deleted = 0
+    for dup_list in dups:
+        for dup_link in dup_list:
+            if dup_link.keep == 0:
+                path = os.path.join(target_dir, dup_link.sfs_path)
+                os.unlink(path)
+                deleted += 1
+    return deleted
+
+
+def get_json_path(target_dir):
+    """Compute path of de-duplication JSON in the target directory"""
+    return os.path.join(
+        target_dir,
+        os.path.basename(target_dir) + constants['DEDUP_FILE_EXTENSION'] + core.constants['SFS_FILE_EXTENSION']
+    )

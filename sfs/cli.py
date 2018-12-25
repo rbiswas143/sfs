@@ -60,11 +60,11 @@ def cli_manager(command=None, exit_on_error=True, raise_error=False):
         error = True
     except exceptions.SFSException as exc:
         log.cli_output('{} {}'.format(error_messages['INTERNAL'], str(exc)))
-        log.logger.error("Internal Error")
+        log.logger.exception("Internal Error")
         error = True
     except Exception:
         log.cli_output(error_messages['UNKNOWN'])
-        log.logger.error("Unknown Error")
+        log.logger.exception("Unknown Error")
         error = True
     finally:
         if error and raise_error:

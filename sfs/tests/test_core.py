@@ -416,11 +416,10 @@ class CollectionTests(helper.TestCaseWithFS):
 
         # Returns a valid NodeStats object
         stats = col1.get_stats(col_path)
-        self.assertIsInstance(stats, core.Collection.NodeStats)
-        for ts in [stats.ctime, stats.mtime]:
-            dt = datetime.datetime.fromtimestamp(ts)
-            self.assertLess(before, dt)
-            self.assertGreater(after, dt)
+        self.assertIsInstance(stats, fs.FSNode.NodeStats)
+        dt = datetime.datetime.fromtimestamp(stats.ctime)
+        self.assertLess(before, dt)
+        self.assertGreater(after, dt)
         self.assertEqual(20, stats.size)
 
         # Returns None if stats not found
@@ -441,7 +440,7 @@ class CollectionTests(helper.TestCaseWithFS):
             helper.dummy_file(f)
 
         # Skips SFS specific files and directories
-        for root, *all_nodes in self.sfs.walk(fs.walk_bfs):
+        for root, *all_nodes in core.SFS.walk(fs.walk_bfs, self.sfs.root):
             for nodes in all_nodes:
                 for node in nodes:
                     self.assertFalse(node.path.startswith(sfs_dir))

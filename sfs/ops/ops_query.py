@@ -132,7 +132,7 @@ def compute_directory_stats(sfs, sfs_dir):
     :return: An instance of DirectoryStats
     """
     dir_stats = DirectoryStats()
-    for root, files, dirs, links in sfs.walk(fs.walk_bfs, sfs_dir):
+    for root, files, dirs, links in core.SFS.walk(fs.walk_bfs, sfs_dir):
         dir_stats.files += len(files)
         dir_stats.sub_directories += len(dirs)
         for lnk in links:

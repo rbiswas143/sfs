@@ -1,4 +1,5 @@
 import collections
+import json
 import pickle
 import os
 
@@ -37,6 +38,21 @@ class FSNode:
     It is essentially a wrapper around an instance of DirEntry obtained from the iterator returned by by 'os.scandir'
     """
 
+    class NodeStats:
+        """Persisted metadata of a node"""
+
+        def __init__(self, ctime=None, size=0, dest=None):
+            self.ctime = ctime
+            self.size = size
+            self.dest = dest
+
+        def __repr__(self):
+            return "{}.{}(ctime={}, size={}, dest={})".format(
+                FSNode.__name__,
+                FSNode.NodeStats.__name__,
+                self.ctime, self.size, self.dest
+            )
+
     def __init__(self, dir_entry):
         self.dir_entry = dir_entry
 
@@ -66,7 +82,11 @@ class FSNode:
     @property
     @helper.cached_method()
     def stat(self):
-        return self.dir_entry.stat(follow_symlinks=False)
+        raw_stats = self.dir_entry.stat(follow_symlinks=False)
+        return FSNode.NodeStats(
+            ctime=raw_stats.st_ctime, size=raw_stats.st_size,
+            dest=os.readlink(self.path) if self.is_symlink else None
+        )
 
 
 def scan_dir(path):
@@ -204,6 +224,22 @@ def load_unpickled(*path):
     final_path = os.path.join(*path)
     with open(final_path, 'rb') as mfile:
         data = pickle.load(mfile)
+    return data
+
+
+# JSON Utils
+
+
+def save_json(data, path, serializer=None):
+    """Save an object to a JSON file, optionally with a custom serializer"""
+    with open(path, 'w') as jf:
+        json.dump(data, jf, default=serializer, indent=4)
+
+
+def load_json(path, deserializer=None):
+    """Load an object from a JSON file, optionally with a custom deserializer"""
+    with open(path, 'r') as jf:
+        data = json.load(jf, object_hook=deserializer)
     return data
 
 

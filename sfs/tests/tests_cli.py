@@ -16,7 +16,7 @@ import sfs.tests.helper as test_helper
 import sfs.ops.ops_collection as ops_collection
 import sfs.ops.ops_main as ops_main
 import sfs.ops.ops_query as ops_query
-
+import sfs.ops.ops_dedup as ops_dedup
 
 # Settings
 
@@ -604,3 +604,129 @@ class QueryOpsCLITests(test_helper.TestCaseWithFS):
         self.assertEqual([
             prepare_args(prepare_validation_error(ops_query.messages['QUERY']['ERROR']['STATS_NOT_FOUND']))
         ], output)
+
+
+class DedupOpsCLITests(test_helper.TestCaseWithFS):
+
+    def __init__(self, *args, **kwargs):
+        super(DedupOpsCLITests, self).__init__(*args, **kwargs)
+        self.sfs_root = os.path.join(self.TESTS_BASE, 'sfs_root')
+        self.col_root = os.path.join(self.TESTS_BASE, 'col')
+        self.col_name = 'col'
+
+    def setUp(self):
+        super(DedupOpsCLITests, self).setUp()
+
+        # Create collection and SFS nodes
+        os.mkdir(self.sfs_root)
+        col_files = [(os.path.join(self.col_root, rel_path), size) for rel_path, size in [
+            (os.path.join('dir1', 'file1'), 100),
+            (os.path.join('dir1', 'file2'), 200),
+            (os.path.join('dir1', 'file3'), 500),
+            (os.path.join('dir2', 'file1'), 100),
+            (os.path.join('dir2', 'file2'), 300),
+            (os.path.join('dir2', 'file4'), 500),
+            (os.path.join('dir3', 'file2'), 200),
+        ]]
+        for col_file, size in col_files:
+            os.makedirs(os.path.dirname(col_file), exist_ok=True)
+            test_helper.dummy_file(col_file, size)
+
+        core.SFS.init_sfs(self.sfs_root)
+        self.sfs = core.SFS.get_by_path(self.sfs_root)
+        self.sfs.add_collection(self.col_name, self.col_root)
+        self.col = self.sfs.get_collection_by_name(self.col_name)
+
+    def test_find_dups(self):
+        # Must be inside an SFS
+        not_sfs = self.TESTS_BASE
+        output = cli_exec([ops_dedup.commands['FIND_DUPS'], not_sfs], ignore_errors=True)
+        self.assertEqual([
+            prepare_args(prepare_validation_error(ops_dedup.messages['FIND_DUPS']['ERROR']['NOT_IN_SFS']))
+        ], output)
+
+        # Path must be a valid directory
+        not_dir = os.path.join(self.sfs_root, 'not_dir')
+        output = cli_exec([ops_dedup.commands['FIND_DUPS'], not_dir], ignore_errors=True)
+        self.assertEqual([
+            prepare_args(prepare_validation_error(ops_dedup.messages['FIND_DUPS']['ERROR']['INVALID_PATH']))
+        ], output)
+
+        # Reports duplicate count and JSON path
+        output = cli_exec([ops_dedup.commands['FIND_DUPS'], self.sfs_root], ignore_errors=False)
+        self.assertEqual([
+            prepare_args("{}{}".format(ops_dedup.messages['FIND_DUPS']['OUTPUT']['DUPLICATE_COUNT'], 4)),
+            prepare_args("{}{}".format(
+                ops_dedup.messages['FIND_DUPS']['OUTPUT']['JSON_PATH'], ops_dedup.get_json_path(self.sfs_root)
+            ))
+        ], output)
+
+        # Reports that no duplicates were found
+        output = cli_exec([
+            ops_dedup.commands['FIND_DUPS'], os.path.join(self.sfs_root, self.col_name, 'dir3')
+        ], ignore_errors=False)
+        self.assertEqual([
+            prepare_args(ops_dedup.messages['FIND_DUPS']['OUTPUT']['NO_DUPLICATES'])
+        ], output)
+
+        # JSON must not already exist
+        output = cli_exec([ops_dedup.commands['FIND_DUPS'], self.sfs_root], ignore_errors=True)
+        self.assertEqual([
+            prepare_args(prepare_validation_error(ops_dedup.messages['FIND_DUPS']['ERROR']['JSON_EXISTS']))
+        ], output)
+
+        # JSON can be overriden with the override flag
+        cli_exec([ops_dedup.commands['FIND_DUPS'], self.sfs_root, '--override'], ignore_errors=False)
+
+        # Delete duplicate flag marks files for deletion correctly
+        with unittest.mock.patch('sfs.ops.ops_dedup.find_dups') as find_dups:
+            find_dups.return_value = []
+            cli_exec([ops_dedup.commands['FIND_DUPS'], self.sfs_root, '--override'], ignore_errors=False)
+            self.assertEqual(find_dups.call_args[1]['keep'], 'all')
+            cli_exec([
+                ops_dedup.commands['FIND_DUPS'], self.sfs_root, '--del-duplicates', '--override'
+            ], ignore_errors=False)
+            self.assertEqual(find_dups.call_args[1]['keep'], 'first')
+
+    def test_del_dups(self):
+        # Must be inside an SFS
+        not_sfs = self.TESTS_BASE
+        output = cli_exec([ops_dedup.commands['DEDUP'], not_sfs], ignore_errors=True)
+        self.assertEqual([
+            prepare_args(prepare_validation_error(ops_dedup.messages['DEDUP']['ERROR']['NOT_IN_SFS']))
+        ], output)
+
+        # Path must be a valid directory
+        not_dir = os.path.join(self.sfs_root, 'not_dir')
+        output = cli_exec([ops_dedup.commands['DEDUP'], not_dir], ignore_errors=True)
+        self.assertEqual([
+            prepare_args(prepare_validation_error(ops_dedup.messages['DEDUP']['ERROR']['INVALID_PATH']))
+        ], output)
+
+        # Dedup JSON must be present in the target directory
+        output = cli_exec([ops_dedup.commands['DEDUP'], self.sfs_root], ignore_errors=True)
+        self.assertEqual([
+            prepare_args(prepare_validation_error(ops_dedup.messages['DEDUP']['ERROR']['JSON_NOT_FOUND']))
+        ], output)
+
+        # Create JSON
+        cli_exec([ops_dedup.commands['FIND_DUPS'], self.sfs_root], ignore_errors=False)
+
+        # Outputs number of links deleted
+        output = cli_exec([ops_dedup.commands['DEDUP'], self.sfs_root], ignore_errors=False)
+        self.assertEqual([
+            prepare_args("{}{}".format(ops_dedup.messages['DEDUP']['OUTPUT'], 0))
+        ], output)
+
+        # Does not delete dedup JSON by default
+        json_path = ops_dedup.get_json_path(self.sfs_root)
+        self.assertTrue(os.path.isfile(json_path))
+
+        # Deletes dedup JSON with flag
+        cli_exec([ops_dedup.commands['FIND_DUPS'], self.sfs_root, '--del-duplicates', '--override'],
+                 ignore_errors=False)
+        output = cli_exec([ops_dedup.commands['DEDUP'], self.sfs_root, '--del-json'], ignore_errors=False)
+        self.assertEqual([
+            prepare_args("{}{}".format(ops_dedup.messages['DEDUP']['OUTPUT'], 2))
+        ], output)
+        self.assertFalse(os.path.isfile(json_path))

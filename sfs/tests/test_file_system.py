@@ -1,4 +1,5 @@
 import os
+import json
 import unittest
 
 import sfs.file_system as fs
@@ -81,7 +82,7 @@ class ScanDirTests(helper.TestCaseWithFS):
             [file_node.is_dir, False],
             [file_node.is_file, True],
             [file_node.is_symlink, False],
-            [isinstance(file_node.stat, os.stat_result), True],
+            [isinstance(file_node.stat, fs.FSNode.NodeStats), True],
         ]
 
         # Iterates over valid file nodes
@@ -100,7 +101,7 @@ class ScanDirTests(helper.TestCaseWithFS):
             [dir_node.is_dir, True],
             [dir_node.is_file, False],
             [dir_node.is_symlink, False],
-            [isinstance(dir_node.stat, os.stat_result), True],
+            [isinstance(dir_node.stat, fs.FSNode.NodeStats), True],
         ]
 
         # Iterates over valid directory nodes
@@ -120,7 +121,7 @@ class ScanDirTests(helper.TestCaseWithFS):
             [link_node.is_dir, False],
             [link_node.is_file, False],
             [link_node.is_symlink, True],
-            [isinstance(link_node.stat, os.stat_result), True],
+            [isinstance(link_node.stat, fs.FSNode.NodeStats), True],
         ]
 
         # Iterates over valid symlink nodes
@@ -329,6 +330,58 @@ class PickleUtilsTests(helper.TestCaseWithFS):
         # Un-pickles and reloads data
         unpickled = fs.load_unpickled(self.TESTS_BASE, file_name)
         self.assertEqual(test_dict, unpickled)
+
+
+class JSONUtilTests(helper.TestCaseWithFS):
+
+    def test_save_json(self):
+        path = os.path.join(self.TESTS_BASE, 'test.json')
+
+        # Saves a builtin type without a serializer
+        data = [1, 2, 3]
+        fs.save_json(data, path)
+        with open(path, 'r') as jf:
+            saved = json.load(jf)
+        self.assertEqual(data, saved)
+
+        # Saves a custom type with a serializer
+        class TestClass:
+            def __init__(self):
+                self.x = 10
+                self.y = 20
+
+        data = [TestClass(), TestClass()]
+        fs.save_json(data, path, serializer=lambda x: x.__dict__)
+        with open(path, 'r') as jf:
+            saved = json.load(jf)
+        self.assertEqual(list(map(lambda x: x.__dict__, data)), saved)
+
+    def test_load_json(self):
+        path = os.path.join(self.TESTS_BASE, 'test.json')
+
+        # Loads a saved builtin type
+        data = [1, 2, 3]
+        fs.save_json(data, path)
+        saved = fs.load_json(path)
+        self.assertEqual(data, saved)
+
+        # Loads a saved custom type with a deserializer
+        class TestClass:
+            def __init__(self):
+                self.x = 10
+                self.y = 20
+
+        def deserializer(json_data):
+            d = TestClass()
+            d.__dict__.update(json_data)
+            return d
+
+        data = [TestClass(), TestClass()]
+        fs.save_json(data, path, serializer=lambda x: x.__dict__)
+        saved = fs.load_json(path, deserializer=deserializer)
+        self.assertEqual(len(data), len(saved))
+        self.assertIs(TestClass, type(saved[0]))
+        self.assertEqual(list(map(lambda x: x.__dict__, data)), list(map(lambda x: x.__dict__, saved)))
 
 
 class PathUtilsTests(unittest.TestCase):

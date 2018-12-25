@@ -181,8 +181,8 @@ class SFS:
         _del_cond = _del_cond_all if col_root is None else _del_cond_by_root
 
         deleted = 0
-        for root, dirs, files, links in self.walk(fs.walk_dfs):
-            # Check for foreign or orphan links and delte them
+        for root, dirs, files, links in SFS.walk(fs.walk_dfs, self.root):
+            # Check for foreign or orphan links and delete them
             for lnk in links:
                 if _del_cond(os.readlink(lnk.path)):
                     deleted += 1
@@ -190,20 +190,22 @@ class SFS:
 
         return SfsUpdates(added=0, deleted=deleted, updated=0)
 
-    def walk(self, walk_gen, start_dir=None):
+    @staticmethod
+    def walk(walk_gen, start_dir):
         """
         Enumerate paths inside an SFS by excluding SFS specific files and directories
         Exclusions: SFS directory, Files with SFS specific extensions
         :param walk_gen: A path generator, for example, fs.walk_bfs
-        :param start_dir: Directory within the current SFS whose contents are to be enumerated. Defaults to SFS Root
+        :param start_dir: Directory within an SFS whose contents are to be enumerated
         """
+        sfs = SFS.get_by_path(start_dir)
         _filter_dirs = {
-            fs.get_hidden_directory_path(constants['SFS_DIR'], self.root)
+            fs.get_hidden_directory_path(constants['SFS_DIR'], sfs.root)
         }
         _filter_extensions = {
             constants['SFS_FILE_EXTENSION']
         }
-        for root, files, dirs, links in walk_gen(start_dir if start_dir is not None else self.root):
+        for root, files, dirs, links in walk_gen(start_dir):
             dirs[:] = list(filter(lambda n: n.path not in _filter_dirs, dirs))
             files[:] = list(filter(lambda n: os.path.splitext(n.name)[1] not in _filter_extensions, files))
             yield root, files, dirs, links
@@ -218,21 +220,6 @@ class Collection:
    directory as well as their metadata
    - Collection instances are associated to and accessible through an SFS instance
    """
-
-    class NodeStats:
-        """Persisted metadata related to source files and links of a collection"""
-
-        def __init__(self, ctime=None, mtime=None, size=0):
-            self.ctime = ctime
-            self.mtime = mtime
-            self.size = size
-
-        def __repr__(self):
-            return "{}.{}(ctime={}, mtime={}, size={})".format(
-                Collection.__name__,
-                Collection.NodeStats.__name__,
-                self.ctime, self.mtime, self.size
-            )
 
     def __init__(self, name, base, sfs_root, col_dir):
         self.name = name
@@ -283,9 +270,7 @@ class Collection:
 
                 # Save metadata
                 stats_file = os.path.join(stats_root, node.name)
-                raw_stats = node.stat
-                node_stats = Collection.NodeStats(raw_stats.st_ctime, raw_stats.st_mtime, raw_stats.st_size)
-                fs.save_pickled(node_stats, stats_file)
+                fs.save_pickled(node.stat, stats_file)
 
         return SfsUpdates(added=added, deleted=0, updated=updated)
 
@@ -313,7 +298,7 @@ class Collection:
         """
         Fetch the metadata of source file located at 'col_path' in the current SFS collection
         :param col_path: Path of source file or link
-        :return: Instance of NodeStats if found else None
+        :return: Instance of fs.FSNode.NodeStats if found else None
         """
         rel_path = os.path.relpath(col_path, self.base)
         meta_path = os.path.join(self.stats_base, rel_path)
