@@ -39,7 +39,7 @@ messages = {
         'OUTPUT': {
             'NO_DUPLICATES': 'No duplicates found',
             'DUPLICATE_COUNT': 'Duplicates found: ',
-            'JSON_PATH': 'Duplicates have been saved in JSON file: ',
+            'JSON_PATH': 'Duplicates have been saved to JSON file: ',
         }
     },
     'DEDUP': {
@@ -60,7 +60,7 @@ messages = {
 
 
 @events.subscriber(events.events['CLI_REGISTRY'])
-def _sfs_ops_cli(parser, parents=()):
+def _dedup_ops_cli(parser, parents=()):
     dedup_json = parser.add_parser(
         commands['FIND_DUPS'],
         parents=parents,
