@@ -167,9 +167,10 @@ class CollectionTests(helper.TestCaseWithFS):
 
         # Adds correct number of files and directories
         col_sfs_root = os.path.join(self.sfs.root, 'col1')
-        self.assertEqual(0, helper.count_files(col_sfs_root))
-        self.assertEqual(2, helper.count_directories(col_sfs_root))
-        self.assertEqual(5, helper.count_symlinks(col_sfs_root))
+        counts = fs.count_nodes(col_sfs_root)
+        self.assertEqual(0, counts['files'])
+        self.assertEqual(2, counts['dirs'])
+        self.assertEqual(5, counts['links'])
 
     def test_add_multiple_collections(self):
         self.sfs.add_collection('col1', self.col1_base)
@@ -319,8 +320,8 @@ class CollectionTests(helper.TestCaseWithFS):
         self.assertEqual(1, sfs_updates.deleted)
 
         # Deletes only orphaned links
-        self.assertEqual(0, helper.count_symlinks(os.path.join(self.sfs.root, col1.name)))
-        self.assertEqual(1, helper.count_symlinks(self.sfs.root))
+        self.assertEqual(0, fs.count_nodes(os.path.join(self.sfs.root, col1.name))['links'])
+        self.assertEqual(1, fs.count_nodes(self.sfs.root)['links'])
 
     def test_delete_orphans_all(self):
         self.sfs.add_collection('col1', self.col1_base)
@@ -337,8 +338,8 @@ class CollectionTests(helper.TestCaseWithFS):
         self.assertEqual(5, sfs_updates.deleted)
 
         # Deletes only orphaned links
-        self.assertEqual(0, helper.count_symlinks(os.path.join(self.sfs.root, col1.name)))
-        self.assertEqual(1, helper.count_symlinks(self.sfs.root))
+        self.assertEqual(0, fs.count_nodes(os.path.join(self.sfs.root, col1.name))['links'])
+        self.assertEqual(1, fs.count_nodes(self.sfs.root)['links'])
 
     def test_update_collection(self):
         self.sfs.add_collection('col1', self.col1_base)
@@ -350,9 +351,7 @@ class CollectionTests(helper.TestCaseWithFS):
         old_stats = col.get_stats(col_path_updated)
 
         # Counting nodes before update
-        dirs_count = helper.count_directories(col_sfs_root)
-        files_count = helper.count_files(col_sfs_root)
-        symlinks_count = helper.count_symlinks(col_sfs_root)
+        counts_old = fs.count_nodes(col_sfs_root)
 
         # Replacing collection tree with new tree
         shutil.rmtree(self.col1_base)
@@ -377,9 +376,9 @@ class CollectionTests(helper.TestCaseWithFS):
         self.assertEqual(2, sfs_updates.updated)
 
         # Only adds additional links to SFS
-        self.assertEqual(dirs_count, helper.count_directories(col_sfs_root))
-        self.assertEqual(files_count, helper.count_files(col_sfs_root))
-        self.assertEqual(symlinks_count + 2, helper.count_symlinks(col_sfs_root))
+        counts_new = fs.count_nodes(col_sfs_root)
+        counts_old['links'] += 2
+        self.assertEqual(counts_old, counts_new)
 
         # Adds a valid link to a new collection file
         new_link = os.path.join(col_sfs_root, 'dir_1a', 'file_1ab')

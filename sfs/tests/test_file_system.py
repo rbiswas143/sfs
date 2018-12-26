@@ -305,6 +305,29 @@ class DirectoryUtilsTests(helper.TestCaseWithFS):
         ]:
             self.assertEqual(fs.is_parent_dir(child, parent), result)
 
+    def test_count_nodes(self):
+        tree = {
+            'files': ['file_a', 'file_b'],
+            'links': ['link_a'],
+            'dirs': {
+                'dir_a': {
+                    'files': ['file_aa'],
+                    'links': ['link_a'],
+                    'dirs': {
+                        'dir_aa': {}
+                    }
+                },
+                'dir_b': {}
+            }
+        }
+        self.create_fs_tree(tree)
+
+        # Returns directory count
+        counts = fs.count_nodes(self.TESTS_BASE)
+        self.assertEqual(3, counts['files'])
+        self.assertEqual(3, counts['dirs'])
+        self.assertEqual(2, counts['links'])
+
 
 class PickleUtilsTests(helper.TestCaseWithFS):
 

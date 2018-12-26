@@ -16,27 +16,6 @@ def dummy_link(link_path, file_path='dummy_file'):
     os.symlink(file_path, link_path)
 
 
-def count_files(dir_path):
-    count = 0
-    for root, dirs, files in os.walk(dir_path):
-        count += functools.reduce(lambda _sum, f: _sum + (0 if os.path.islink(os.path.join(root, f)) else 1), files, 0)
-    return count
-
-
-def count_directories(dir_path):
-    count = 0
-    for root, dirs, files in os.walk(dir_path):
-        count += len(dirs)
-    return count
-
-
-def count_symlinks(dir_path):
-    count = 0
-    for root, dirs, files in os.walk(dir_path):
-        count += functools.reduce(lambda _sum, f: _sum + (1 if os.path.islink(os.path.join(root, f)) else 0), files, 0)
-    return count
-
-
 class TestCaseWithFS(unittest.TestCase):
     """
     Base class for all tests which involve creation of file system hierarchies

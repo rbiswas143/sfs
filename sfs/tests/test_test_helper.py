@@ -1,66 +1,31 @@
 import os
 
-import sfs.tests.helper as helper
+import sfs.file_system as fs
+import sfs.tests.helper as test_helper
 
 
-class HelperTests(helper.TestCaseWithFS):
+class HelperTests(test_helper.TestCaseWithFS):
 
     def test_create_file(self):
         file_path = os.path.join(self.TESTS_BASE, 'test_file')
         file_size = 100
-        helper.dummy_file(file_path, file_size)
+        test_helper.dummy_file(file_path, file_size)
 
         # Creates file of specified size
         self.assertTrue(os.path.isfile(file_path))
         self.assertEqual(os.stat(file_path).st_size, 100)
 
-    def test_count_files(self):
-        paths = [os.path.join(self.TESTS_BASE, p) for p in [
-            'file_a',
-            'file_b',
-            os.path.join('dir_a', 'file_aa'),
-            os.path.join('dir_a', 'file_ab')
-        ]]
-        for p in paths:
-            os.makedirs(os.path.dirname(p), exist_ok=True)
-            helper.dummy_file(p)
+    def test_create_symlink(self):
+        link_path = os.path.join(self.TESTS_BASE, 'test_link')
+        source_path = os.path.join(self.TESTS_BASE, 'source', 'path')
+        test_helper.dummy_link(link_path, source_path)
 
-        # Returns file count
-        self.assertEqual(len(paths), helper.count_files(self.TESTS_BASE))
-
-    def test_count_directories(self):
-        paths = [os.path.join(self.TESTS_BASE, p) for p in [
-            'file_a',
-            'file_b',
-            os.path.join('dir_a', 'file_aa'),
-            os.path.join('dir_b', 'file_ba'),
-            os.path.join('dir_c', 'file_ca')
-        ]]
-        for p in paths:
-            os.makedirs(os.path.dirname(p), exist_ok=True)
-            helper.dummy_file(p)
-
-        # Returns directory count
-        self.assertEqual(3, helper.count_directories(self.TESTS_BASE))
-
-    def test_count_symlinks(self):
-        paths = [os.path.join(self.TESTS_BASE, p) for p in [
-            'file_a',
-            'link_a',
-            os.path.join('dir_a', 'link_aa'),
-            os.path.join('dir_a', 'link_ab')
-        ]]
-        for p in paths:
-            if 'link' not in p:
-                continue
-            os.makedirs(os.path.dirname(p), exist_ok=True)
-            helper.dummy_link(p)
-
-        # Returns link count
-        self.assertEqual(len(paths)-1, helper.count_symlinks(self.TESTS_BASE))
+        # Creates link to specified source
+        self.assertTrue(os.path.islink(link_path))
+        self.assertEqual(os.readlink(link_path), source_path)
 
 
-class CreateFSTreeTests(helper.TestCaseWithFS):
+class CreateFSTreeTests(test_helper.TestCaseWithFS):
 
     def test_create_a_file(self):
         tree = {
@@ -139,6 +104,7 @@ class CreateFSTreeTests(helper.TestCaseWithFS):
             self.assertTrue(os.path.islink(path))
 
         # Creates files, links and directories in a nested hierarchy
-        self.assertEqual(len(file_paths), helper.count_files(self.TESTS_BASE))
-        self.assertEqual(len(dir_paths), helper.count_directories(self.TESTS_BASE))
-        self.assertEqual(len(link_paths), helper.count_symlinks(self.TESTS_BASE))
+        counts = fs.count_nodes(self.TESTS_BASE)
+        self.assertEqual(len(file_paths), counts['files'])
+        self.assertEqual(len(dir_paths), counts['dirs'])
+        self.assertEqual(len(link_paths), counts['links'])

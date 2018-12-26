@@ -3,6 +3,7 @@ import os
 import time
 
 import sfs.core as core
+import sfs.file_system as fs
 import sfs.helper as sfs_helper
 import sfs.ops.ops_dedup as ops_dedup
 import sfs.tests.helper as test_helper
@@ -138,6 +139,4 @@ class TestDedupOps(test_helper.TestCaseWithFS):
         self.assertFalse(os.path.isfile(os.path.join(sfs_root, 'col', 'dir2', 'file1')))
         self.assertTrue(os.path.isfile(os.path.join(sfs_root, 'col', 'dir1', 'file2')))
         self.assertFalse(os.path.isfile(os.path.join(sfs_root, 'col', 'dir3', 'file2')))
-        self.assertEqual(5, test_helper.count_symlinks(sfs_root))
-
-
+        self.assertEqual(5, fs.count_nodes(sfs_root)['links'])

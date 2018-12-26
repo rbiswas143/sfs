@@ -1,4 +1,5 @@
 import collections
+import functools
 import json
 import pickle
 import os
@@ -207,6 +208,16 @@ def is_parent_dir(child_path, parent_path):
         if child_path == next_child:
             return False
         child_path = next_child
+
+
+def count_nodes(dir_path):
+    """Get count of all files, directories and symlinks (recursively) in a directory"""
+    count = collections.defaultdict(int)
+    for root, files, dirs, links in walk_bfs(dir_path):
+        count['files'] += len(files)
+        count['dirs'] += len(dirs)
+        count['links'] += len(links)
+    return count
 
 
 # Pickle Utils
