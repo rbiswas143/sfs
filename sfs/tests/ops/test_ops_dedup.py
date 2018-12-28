@@ -46,7 +46,7 @@ class TestDedupOps(test_helper.TestCaseWithFS):
         ]
 
         # Serialization of a list of DuplicateLinks works
-        serialized = [list(map(lambda dup_link: dup_link.to_json(), dup_list)) for dup_list in dups]
+        serialized = [list(map(lambda dup_link: dup_link.to_dict(), dup_list)) for dup_list in dups]
         self.assertEqual(len(dups), len(serialized))
         for dup_list, ser_list in zip(dups, serialized):
             self.assertEqual(len(dup_list), len(ser_list))
@@ -60,7 +60,7 @@ class TestDedupOps(test_helper.TestCaseWithFS):
                 self.assertEqual(d.keep, s['Keep'])
 
         # De-serialization of a list of DuplicateLinks works
-        deserialized = [list(map(lambda s: ops_dedup.DuplicateLink.from_json(s), ser_list)) for ser_list in serialized]
+        deserialized = [list(map(lambda s: ops_dedup.DuplicateLink.from_dict(s), ser_list)) for ser_list in serialized]
         for dup_list, deser_list in zip(dups, deserialized):
             self.assertEqual(len(dup_list), len(deser_list))
             for d, s in zip(dup_list, deser_list):
