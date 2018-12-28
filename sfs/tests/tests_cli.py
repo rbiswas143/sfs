@@ -9,14 +9,16 @@ import sfs.cli as cli
 import sfs.core as core
 import sfs.events as events
 import sfs.exceptions as exceptions
+import sfs.file_system as fs
 import sfs.helper as sfs_helper
 import sfs.log_utils as log
 import sfs.tests.helper as test_helper
 
 import sfs.ops.ops_collection as ops_collection
-import sfs.ops.ops_main as ops_main
-import sfs.ops.ops_query as ops_query
 import sfs.ops.ops_dedup as ops_dedup
+import sfs.ops.ops_main as ops_main
+import sfs.ops.ops_merge as ops_merge
+import sfs.ops.ops_query as ops_query
 
 # Settings
 
@@ -730,3 +732,168 @@ class DedupOpsCLITests(test_helper.TestCaseWithFS):
             prepare_args("{}{}".format(ops_dedup.messages['DEDUP']['OUTPUT'], 2))
         ], output)
         self.assertFalse(os.path.isfile(json_path))
+
+
+class TestMergeOps(test_helper.TestCaseWithFS):
+
+    def test_merge(self):
+        # Create SFS, target and source
+        sfs_root = self.TESTS_BASE
+        core.SFS.init_sfs(sfs_root)
+        self.create_fs_tree({
+            'dirs': {
+                'dir1': {},
+                'dir2': {},
+            }
+        }, base=sfs_root)
+        target = os.path.join(sfs_root, 'dir1')
+        source = os.path.join(sfs_root, 'dir2')
+
+        # Target and Source be in SFS
+        not_in_sfs = fs.expand_path(os.path.join(sfs_root, '..'))
+        output = cli_exec([ops_merge.commands['MERGE'], not_in_sfs, source], ignore_errors=True)
+        self.assertEqual([
+            prepare_args(prepare_validation_error(ops_merge.messages['MERGE']['ERROR']['NOT_IN_SFS']))
+        ], output)
+        output = cli_exec([ops_merge.commands['MERGE'], target, not_in_sfs], ignore_errors=True)
+        self.assertEqual([
+            prepare_args(prepare_validation_error(ops_merge.messages['MERGE']['ERROR']['NOT_IN_SFS']))
+        ], output)
+
+        # Target and source must be valid paths
+        not_dir = fs.expand_path(os.path.join(sfs_root, 'not_dir'))
+        output = cli_exec([ops_merge.commands['MERGE'], not_dir, source], ignore_errors=True)
+        self.assertEqual([
+            prepare_args(prepare_validation_error(ops_merge.messages['MERGE']['ERROR']['INVALID_PATH']))
+        ], output)
+        output = cli_exec([ops_merge.commands['MERGE'], target, not_dir], ignore_errors=True)
+        self.assertEqual([
+            prepare_args(prepare_validation_error(ops_merge.messages['MERGE']['ERROR']['INVALID_PATH']))
+        ], output)
+
+        # Target and Source cannot be nested
+        output = cli_exec([ops_merge.commands['MERGE'], sfs_root, source], ignore_errors=True)
+        self.assertEqual([
+            prepare_args(prepare_validation_error(ops_merge.messages['MERGE']['ERROR']['NESTED_DIR']))
+        ], output)
+        output = cli_exec([ops_merge.commands['MERGE'], target, sfs_root], ignore_errors=True)
+        self.assertEqual([
+            prepare_args(prepare_validation_error(ops_merge.messages['MERGE']['ERROR']['NESTED_DIR']))
+        ], output)
+
+        dummy_conflict = ops_merge.MergeConflict(
+            'test_path', ops_merge.MergeConflict.FileStats('file1'), ops_merge.MergeConflict.FileStats('file2')
+        )
+
+        # JSON must exist when using conflicts JSON for merge'
+        output = cli_exec([ops_merge.commands['MERGE'], target, source, '--json'], ignore_errors=True)
+        self.assertEqual([
+            prepare_args(prepare_validation_error(ops_merge.messages['MERGE']['ERROR']['JSON_NOT_FOUND']))
+        ], output)
+
+        # JSON is not generated in case of no conflicts or when continue flag is set
+        cli_exec([ops_merge.commands['MERGE'], target, source], ignore_errors=False)
+        self.assertFalse(os.path.isfile(ops_merge.get_json_path(target)))
+
+        with unittest.mock.patch('sfs.ops.ops_merge.get_merge_conflicts') as get_merge_conflicts:
+            get_merge_conflicts.return_value = [dummy_conflict]
+            cli_exec([ops_merge.commands['MERGE'], target, source, '--continue'], ignore_errors=False)
+            self.assertFalse(os.path.isfile(ops_merge.get_json_path(target)))
+
+        # JSON is generated in case of conflicts
+        with unittest.mock.patch('sfs.ops.ops_merge.get_merge_conflicts') as get_merge_conflicts:
+            get_merge_conflicts.return_value = [dummy_conflict]
+            cli_exec([ops_merge.commands['MERGE'], target, source], ignore_errors=False)
+            self.assertTrue(os.path.isfile(ops_merge.get_json_path(target)))
+
+        # JSON must not exist when creating conflicts JSON
+        with unittest.mock.patch('sfs.ops.ops_merge.get_merge_conflicts') as get_merge_conflicts:
+            get_merge_conflicts.return_value = [dummy_conflict]
+            output = cli_exec([ops_merge.commands['MERGE'], target, source], ignore_errors=True)
+            self.assertEqual([
+                prepare_args(prepare_validation_error(ops_merge.messages['MERGE']['ERROR']['JSON_EXISTS']))
+            ], output)
+
+        # Validates merge conflicts JSON
+        with unittest.mock.patch('sfs.ops.ops_merge.validate_merge_conflicts') as validate_merge_conflicts:
+            with unittest.mock.patch('sfs.ops.ops_merge.MergeConflict.from_dict') as from_dict:
+                path1 = os.path.join(target, 'file1')
+                path2 = os.path.join(source, 'file1')
+                validate_merge_conflicts.return_value = (path1, path2)
+                from_dict.return_value = dummy_conflict
+                output = cli_exec([ops_merge.commands['MERGE'], target, source, '--json'], ignore_errors=True)
+                self.assertEqual([prepare_args(prepare_validation_error(
+                    '{}: "{}", "{}"'.format(ops_merge.messages['MERGE']['ERROR']['INVALID_CONFLICTS'], path1, path2)
+                ))], output)
+                self.assertEqual(1, len(validate_merge_conflicts.call_args_list))
+                self.assertEqual(3, len(validate_merge_conflicts.call_args[0]))
+                self.assertEqual((target, source), validate_merge_conflicts.call_args[0][:-1])
+
+        # Override flag ignores existing JSON and overwrites it
+        with unittest.mock.patch('sfs.ops.ops_merge.get_merge_conflicts') as get_merge_conflicts:
+            get_merge_conflicts.return_value = [dummy_conflict] * 2
+            old_stats = os.stat(ops_merge.get_json_path(target))
+            cli_exec([ops_merge.commands['MERGE'], target, source, '--override'], ignore_errors=False)
+            new_stats = os.stat(ops_merge.get_json_path(target))
+            self.assertNotEqual(old_stats.st_size, new_stats.st_size)
+
+        # Deletes JSON on completion with flag set
+        cli_exec([ops_merge.commands['MERGE'], target, source, '--del-json', '--override'], ignore_errors=False)
+        self.assertFalse(os.path.isfile(ops_merge.get_json_path(target)))
+
+        # Deletes Source directory on completion with flag set
+        self.create_fs_tree({
+            'files': ['file_1'],
+            'links': ['link_1'],
+            'dirs': {
+                'dir_1': {}
+            }
+        }, source)
+        output = cli_exec([ops_merge.commands['MERGE'], target, source, '--del-source'], ignore_errors=False)
+        self.assertEqual(
+            prepare_args("{}{}".format(ops_merge.messages['MERGE']['OUTPUT']['SOURCE_DELETED'], 2))
+            , output[-1])
+        self.assertFalse(os.path.isdir(source))
+        os.mkdir(source)
+
+        # Passes valid arguments to get_merge_conflicts
+        with unittest.mock.patch('sfs.ops.ops_merge.get_merge_conflicts') as get_merge_conflicts:
+            get_merge_conflicts.return_value = [dummy_conflict] * 3
+            output = cli_exec([ops_merge.commands['MERGE'], target, source], ignore_errors=False)
+            self.assertEqual(1, len(get_merge_conflicts.call_args_list))
+            self.assertEqual((target, source), get_merge_conflicts.call_args[0][1:])
+            self.assertEqual([
+                prepare_args("{}{}".format(ops_merge.messages['MERGE']['OUTPUT']['CONFLICT_COUNT'], 3)),
+                prepare_args("{}{}".format(
+                    ops_merge.messages['MERGE']['OUTPUT']['JSON_PATH'], ops_merge.get_json_path(target)
+                ))
+            ], output)
+
+            # Passes correct value of keep
+            for keep in ops_merge.constants['MERGE_MODES'].values():
+                cli_exec([ops_merge.commands['MERGE'], target, source, '--override', '--on-conflict', keep])
+                self.assertEqual(keep, get_merge_conflicts.call_args[1]['keep'])
+
+        # Passes valid arguments to merge
+        with unittest.mock.patch('sfs.ops.ops_merge.merge') as merge:
+            merge.return_value = {
+                'DIRS_CREATED': 1,
+                'DIRS_DELETED': 2,
+                'FILES_MERGED': 3,
+                'LINKS_MERGED': 4,
+                'NODES_DELETED': 5,
+                'NODES_RENAMED': 6,
+            }
+            output = cli_exec([ops_merge.commands['MERGE'], target, source], ignore_errors=False)
+            self.assertEqual(1, len(merge.call_args_list))
+            self.assertEqual(3, len(merge.call_args[0]))
+            self.assertEqual((target, source), merge.call_args[0][:-1])
+            self.assertEqual([
+                prepare_args("{}{}".format(ops_merge.messages['MERGE']['OUTPUT']['CONFLICT_COUNT'], 0)),
+                prepare_args("{}{}".format(ops_merge.messages['MERGE']['OUTPUT']['DIRS_CREATED'], 1)),
+                prepare_args("{}{}".format(ops_merge.messages['MERGE']['OUTPUT']['DIRS_DELETED'], 2)),
+                prepare_args("{}{}".format(ops_merge.messages['MERGE']['OUTPUT']['FILES_MERGED'], 3)),
+                prepare_args("{}{}".format(ops_merge.messages['MERGE']['OUTPUT']['LINKS_MERGED'], 4)),
+                prepare_args("{}{}".format(ops_merge.messages['MERGE']['OUTPUT']['NODES_DELETED'], 5)),
+                prepare_args("{}{}".format(ops_merge.messages['MERGE']['OUTPUT']['NODES_RENAMED'], 6))
+            ], output)
