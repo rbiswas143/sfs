@@ -12,7 +12,7 @@ import sfs.exceptions as exceptions
 import sfs.file_system as fs
 import sfs.helper as sfs_helper
 import sfs.log_utils as log
-import sfs.tests.helper as test_helper
+import tests.helper as test_helper
 
 import sfs.ops.ops_collection as ops_collection
 import sfs.ops.ops_dedup as ops_dedup

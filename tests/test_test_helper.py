@@ -1,7 +1,7 @@
 import os
 
 import sfs.file_system as fs
-import sfs.tests.helper as test_helper
+import tests.helper as test_helper
 
 
 class HelperTests(test_helper.TestCaseWithFS):

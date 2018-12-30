@@ -7,7 +7,7 @@ import sfs.core as core
 import sfs.file_system as fs
 import sfs.helper as sfs_helper
 import sfs.ops.ops_merge as ops_merge
-import sfs.tests.helper as test_helper
+import tests.helper as test_helper
 
 
 class TestDedupMerge(test_helper.TestCaseWithFS):

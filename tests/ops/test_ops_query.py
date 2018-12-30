@@ -2,7 +2,7 @@ import os
 
 import sfs.core as core
 import sfs.ops.ops_query as ops_query
-import sfs.tests.helper as test_helper
+import tests.helper as test_helper
 
 
 class TestQueryOps(test_helper.TestCaseWithFS):

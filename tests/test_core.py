@@ -5,7 +5,7 @@ import time
 
 import sfs.core as core
 import sfs.file_system as fs
-import sfs.tests.helper as helper
+import tests.helper as helper
 
 
 class SFSCoreTests(helper.TestCaseWithFS):

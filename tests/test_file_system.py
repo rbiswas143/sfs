@@ -3,7 +3,7 @@ import json
 import unittest
 
 import sfs.file_system as fs
-import sfs.tests.helper as helper
+import tests.helper as helper
 
 
 class SymbolicLinkUtilsTests(helper.TestCaseWithFS):

@@ -6,7 +6,7 @@ import sfs.core as core
 import sfs.file_system as fs
 import sfs.helper as sfs_helper
 import sfs.ops.ops_dedup as ops_dedup
-import sfs.tests.helper as test_helper
+import tests.helper as test_helper
 
 
 class TestDedupOps(test_helper.TestCaseWithFS):
