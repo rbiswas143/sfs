@@ -55,7 +55,7 @@ def _query_ops_cli(parser, parents=()):
         parents=parents,
         help=messages['QUERY']['HELP']
     )
-    query.add_argument('-p', '--path', help=messages['QUERY']['HELP_OPT']['PATH'])
+    query.add_argument('path', nargs='?', help=messages['QUERY']['HELP_OPT']['PATH'])
 
 
 @ops_helper.cli_command(commands['QUERY'])

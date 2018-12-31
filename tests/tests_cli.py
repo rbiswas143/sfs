@@ -153,7 +153,7 @@ class MainOpsCLITests(test_helper.TestCaseWithFS):
                 os.makedirs(path, exist_ok=True)
 
                 # Works with path argument
-                output = cli_exec([ops_main.commands['IS_SFS'], '--path', path])
+                output = cli_exec([ops_main.commands['IS_SFS'], path])
                 self.assertEqual([
                     prepare_args("{}{}".format(ops_main.messages['IS_SFS']['OUTPUT']['YES'], sfs_root))
                 ], output)
@@ -173,7 +173,7 @@ class MainOpsCLITests(test_helper.TestCaseWithFS):
             # Output is negative for paths outside SFS
             get_by_path.return_value = None
             for path in [self.TESTS_BASE, os.path.join(self.TESTS_BASE, 'nested')]:
-                output = cli_exec([ops_main.commands['IS_SFS'], '--path', path])
+                output = cli_exec([ops_main.commands['IS_SFS'], path])
                 self.assertEqual([
                     prepare_args(ops_main.messages['IS_SFS']['OUTPUT']['NO'])
                 ], output)
@@ -512,7 +512,7 @@ class QueryOpsCLITests(test_helper.TestCaseWithFS):
 
     def test_query_link(self):
         # Reports link info
-        output = cli_exec([ops_query.commands['QUERY'], '--path', self.link_path])
+        output = cli_exec([ops_query.commands['QUERY'], self.link_path])
         self.assertEqual([
             prepare_args("{}{}".format(ops_query.messages['QUERY']['OUTPUT']['LINK']['COL_NAME'], self.col_name)),
             prepare_args("{}{}".format(ops_query.messages['QUERY']['OUTPUT']['LINK']['COL_PATH'], self.col_path)),
@@ -542,7 +542,7 @@ class QueryOpsCLITests(test_helper.TestCaseWithFS):
             compute_directory_stats.return_value = dir_stats
             with change_cwd(dir_path):
                 for output in [
-                    cli_exec([ops_query.commands['QUERY'], '--path', dir_path]),
+                    cli_exec([ops_query.commands['QUERY'], dir_path]),
                     cli_exec([ops_query.commands['QUERY']]),
                 ]:
                     self.assertEqual([
@@ -578,7 +578,7 @@ class QueryOpsCLITests(test_helper.TestCaseWithFS):
     def test_query_link_validations(self):
         # Must be inside an SFS
         not_sfs = self.TESTS_BASE
-        output = cli_exec([ops_query.commands['QUERY'], '--path', not_sfs], ignore_errors=True)
+        output = cli_exec([ops_query.commands['QUERY'], not_sfs], ignore_errors=True)
         self.assertEqual([
             prepare_args(prepare_validation_error(ops_query.messages['QUERY']['ERROR']['NOT_IN_SFS']))
         ], output)
@@ -586,7 +586,7 @@ class QueryOpsCLITests(test_helper.TestCaseWithFS):
         # Path must be link or directory
         file_path = os.path.join(self.sfs_root, 'test_file')
         test_helper.dummy_file(file_path)
-        output = cli_exec([ops_query.commands['QUERY'], '--path', file_path], ignore_errors=True)
+        output = cli_exec([ops_query.commands['QUERY'], file_path], ignore_errors=True)
         self.assertEqual([
             prepare_args(prepare_validation_error(ops_query.messages['QUERY']['ERROR']['NOT_LINK_OR_DIR']))
         ], output)
@@ -594,7 +594,7 @@ class QueryOpsCLITests(test_helper.TestCaseWithFS):
         # Link must belong to a collection
         foreign_link = os.path.join(self.sfs_root, 'foreign_link')
         test_helper.dummy_link(foreign_link)
-        output = cli_exec([ops_query.commands['QUERY'], '--path', foreign_link], ignore_errors=True)
+        output = cli_exec([ops_query.commands['QUERY'], foreign_link], ignore_errors=True)
         self.assertEqual([
             prepare_args(prepare_validation_error(ops_query.messages['QUERY']['ERROR']['COLLECTION_NOT_FOUND']))
         ], output)
@@ -602,7 +602,7 @@ class QueryOpsCLITests(test_helper.TestCaseWithFS):
         # Stats must be available
         stats_path = os.path.join(self.col.stats_base, 'file')
         os.unlink(stats_path)
-        output = cli_exec([ops_query.commands['QUERY'], '--path', self.link_path], ignore_errors=True)
+        output = cli_exec([ops_query.commands['QUERY'], self.link_path], ignore_errors=True)
         self.assertEqual([
             prepare_args(prepare_validation_error(ops_query.messages['QUERY']['ERROR']['STATS_NOT_FOUND']))
         ], output)

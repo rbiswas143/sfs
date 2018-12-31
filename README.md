@@ -53,8 +53,6 @@ also exist in an SFS but they are not managed by it and are mostly ignored.
     # SFS Operations
     init            Initialize a new SFS in the current directory
     is-sfs          Check whether a path is inside an SFS
-                    -p, --path
-                        Path to directory (defaults to current working directory)
     
     # Collection Operations
     add-col         Add a named collection to the current SFS
@@ -69,8 +67,6 @@ also exist in an SFS but they are not managed by it and are mostly ignored.
     
     # Querying SFS files
     query           Query metadata of a file or directory in an SFS
-                    -p, --path
-                        Path to file or directory to query (defaults to current working directory)
     
     # Deduplication
     find-dups      Check for duplicate files (by name and size) recursively 

@@ -50,7 +50,7 @@ def _sfs_ops_cli(parser, parents=()):
         help=messages['IS_SFS']['HELP']
     )
     is_sfs.add_argument(
-        '-p', '--path',
+        'path', nargs='?',
         help=messages['IS_SFS']['HELP_OPT']['PATH']
     )
 
