@@ -89,7 +89,3 @@ def exec_cli():
 
         # Execute command
         events.invoke_subscribers(events.command_key(args.command), args)
-
-
-if __name__ == '__main__':
-    exec_cli()
